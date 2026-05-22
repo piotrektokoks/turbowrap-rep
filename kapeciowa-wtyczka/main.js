@@ -1,4 +1,3 @@
-
 (function(Scratch) {
     'use strict';
 
@@ -7,12 +6,10 @@
     }
 
     let lastGamepadConnected = false;
-    let lastNetworkStatus = navigator.onLine;
+    let lastNetworkStatus = typeof navigator !== 'undefined' ? navigator.onLine : true;
     let lastKeysPressed = {};
     let mouseClickedThisFrame = false;
     let rightMouseClickedThisFrame = false;
-    let lastWindowFocused = document.hasFocus();
-    let networkDataStorage = "Brak danych";
     let mouseX = 0;
     let mouseY = 0;
 
@@ -31,8 +28,8 @@
     }
     requestAnimationFrame(updateFPS);
 
-    window.addEventListener('keydown', (e) => { lastKeysPressed[e.key.toLowerCase()] = true; });
-    window.addEventListener('keyup', (e) => { lastKeysPressed[e.key.toLowerCase()] = false; });
+    window.addEventListener('keydown', (e) => { if (e.key) lastKeysPressed[e.key.toLowerCase()] = true; });
+    window.addEventListener('keyup', (e) => { if (e.key) lastKeysPressed[e.key.toLowerCase()] = false; });
     window.addEventListener('mousedown', (e) => {
         if (e.button === 0) mouseClickedThisFrame = true;
         if (e.button === 2) rightMouseClickedThisFrame = true;
@@ -40,9 +37,6 @@
     window.addEventListener('mousemove', (e) => {
         mouseX = e.clientX;
         mouseY = e.clientY;
-    });
-    window.addEventListener('contextmenu', (e) => {
-        if (Scratch.vm.runtime.ioDevices.mouse) rightMouseClickedThisFrame = true;
     });
 
     class KapeciowaWtyczkaV4 {
@@ -225,7 +219,7 @@
                 ],
                 menus: {
                     axisMenu: { acceptReporters: true, items: [{ text: 'Lewy analog X', value: '0' }, { text: 'Lewy analog Y', value: '1' }, { text: 'Prawy analog X', value: '2' }, { text: 'Prawy analog Y', value: '3' }] },
-                    btnMenu: { acceptReporters: true, items: [{ text: 'Przycisk A / ╳', value: '0' }, { text: 'Przycisk B / ◯', value: '1' }, { text: 'Przycisk X / ▢', value: '2' }, { text: 'Przycisk Y / △', value: '3' }, { text: 'L1', value: '4' }, { text: 'R1', value: '5' }] },
+                    btnMenu: { acceptReporters: true, items: [{ text: 'Przycisk A / X', value: '0' }, { text: 'Przycisk B / O', value: '1' }, { text: 'Przycisk X / Kwadrat', value: '2' }, { text: 'Przycisk Y / Trojkat', value: '3' }, { text: 'L1', value: '4' }, { text: 'R1', value: '5' }] },
                     mouseCoords: { acceptReporters: false, items: [{ text: 'Szerokość X (px)', value: 'X' }, { text: 'Wysokość Y (px)', value: 'Y' }] }
                 }
             };
@@ -237,51 +231,37 @@
         whenMouseClicked() { if (mouseClickedThisFrame) { mouseClickedThisFrame = false; return true; } return false; }
         whenRightMouseClicked() { if (rightMouseClickedThisFrame) { rightMouseClickedThisFrame = false; return true; } return false; }
 
-        isGamepadConnected() { return navigator.getGamepads().some(gp => gp !== null); }
-        getGamepadAxis(args) { const p = navigator.getGamepads()[Math.floor(args.NUM)]; return p ? (p.axes[Math.floor(args.AXIS)] || 0) : 0; }
-        isGamepadButtonPressed(args) { const p = navigator.getGamepads()[Math.floor(args.NUM)]; return p ? (p.buttons[Math.floor(args.BTN)]?.pressed || false) : false; }
+        isGamepadConnected() { return !!(navigator.getGamepads && navigator.getGamepads().some(gp => gp !== null)); }
+        getGamepadAxis(args) { if(!navigator.getGamepads) return 0; const p = navigator.getGamepads()[Math.floor(args.NUM)]; return p ? (p.axes[Math.floor(args.AXIS)] || 0) : 0; }
+        isGamepadButtonPressed(args) { if(!navigator.getGamepads) return false; const p = navigator.getGamepads()[Math.floor(args.NUM)]; return p ? (p.buttons[Math.floor(args.BTN)]?.pressed || false) : false; }
         isOnline() { return navigator.onLine; }
-        async fetchData(args) { try { const r = await fetch(args.URL); const t = await r.text(); return t; } catch(e) { return "Błąd sieci"; } }
+        async fetchData(args) { try { const r = await fetch(args.URL); return await r.text(); } catch(e) { return "Błąd sieci"; } }
         async sendDiscordWebhook(args) { try { await fetch(args.URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content: args.TEXT }) }); } catch(e) {} }
 
         toBase64(args) { try { return btoa(unescape(encodeURIComponent(args.TEXT))); } catch(e) { return 'Błąd'; } }
         fromBase64(args) { try { return decodeURIComponent(escape(atob(args.BASE64))); } catch(e) { return 'Błąd'; } }
         
         caesarCipher(args) {
-            const text = Scratch.Cast.toString(args.TEXT);
-            let shift = Scratch.Cast.toNumber(args.SHIFT);
+            const text = String(args.TEXT);
+            let shift = Number(args.SHIFT);
             if (shift < 0) shift = 26 + (shift % 26);
-            
             return text.split('').map(char => {
                 const code = char.charCodeAt(0);
-                if (code >= 65 && code <= 90) {
-                    return String.fromCharCode(((code - 65 + shift) % 26) + 65);
-                }
-                if (code >= 97 && code <= 122) {
-                    return String.fromCharCode(((code - 97 + shift) % 26) + 97);
-                }
+                if (code >= 65 && code <= 90) return String.fromCharCode(((code - 65 + shift) % 26) + 65);
+                if (code >= 97 && code <= 122) return String.fromCharCode(((code - 97 + shift) % 26) + 97);
                 return char;
             }).join('');
         }
 
-        removeHash(args) {
-            const s = Scratch.Cast.toString(args.TEXT);
-            return s.startsWith('#') ? s.slice(1) : s;
-        }
-
-        addHash(args) {
-            const s = Scratch.Cast.toString(args.TEXT);
-            return s.startsWith('#') ? s : '#' + s;
-        }
-
+        removeHash(args) { const s = String(args.TEXT); return s.startsWith('#') ? s.slice(1) : s; }
+        addHash(args) { const s = String(args.TEXT); return s.startsWith('#') ? s : '#' + s; }
         getFPS() { return fps; }
         getMouseWindowPos(args) { return args.COORD === 'X' ? mouseX : mouseY; }
 
         showNotification(args) {
-            if (!("Notification" in window)) return;
-            const title = Scratch.Cast.toString(args.TITLE);
-            const body = Scratch.Cast.toString(args.BODY);
-
+            if (typeof window === 'undefined' || !("Notification" in window)) return;
+            const title = String(args.TITLE);
+            const body = String(args.BODY);
             if (Notification.permission === "granted") {
                 new Notification(title, { body: body });
             } else if (Notification.permission !== "denied") {
@@ -292,14 +272,14 @@
         }
 
         copyToClipboard(args) {
-            const text = Scratch.Cast.toString(args.TEXT);
-            if (navigator.clipboard && navigator.clipboard.writeText) {
-                navigator.clipboard.writeText(text);
+            const text = String(args.TEXT);
+            if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+                navigator.clipboard.writeText(text).catch(() => {});
             }
         }
 
         generateRandomString(args) {
-            const len = Math.max(1, Math.floor(Scratch.Cast.toNumber(args.LEN)));
+            const len = Math.max(1, Math.floor(Number(args.LEN) || 8));
             const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
             let result = '';
             for (let i = 0; i < len; i++) {
@@ -309,6 +289,7 @@
         }
 
         downloadFile(args) {
+            if (typeof document === 'undefined') return;
             const blob = new Blob([args.CONTENT], { type: 'text/plain' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
